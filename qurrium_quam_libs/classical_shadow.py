@@ -10,6 +10,7 @@ from pathlib import Path
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector
 
+from qurry import __version__
 from qurry.qurrent.classical_shadow import ShadowUnveilExperiment
 from qurry.qurrium.experiment.utils import exp_id_process
 from qurry.tools import current_time
@@ -248,6 +249,13 @@ def qua_libs_result_to_qurrium_single_shot(
             "transform-from-qua_libs": current_time(),
         },
     }
+
+    version_info = tuple(map(int, __version__.split(".")))
+    if version_info < (0, 13, 0):
+        # Qurrium upcomming version 0.13.0 will remove the `filename` and `files` fields.
+        commons["filename"] = ""
+        commons["files"] = {}
+
     outfields = {
         "denoted": "This is a QuaLibs result converted to Qurrium single-shot format.",
     }
