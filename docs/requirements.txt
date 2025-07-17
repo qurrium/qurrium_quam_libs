@@ -1,0 +1,15 @@
+# sphinx
+sphinx
+sphinx-book-theme
+sphinxext-opengraph
+sphinxcontrib-bibtex
+sphinxcontrib-googleanalytics
+myst-nb
+jupyter-book
+# theme
+furo
+# basic requirements
+ipykernel
+jupyter
+# qurrum requirements
+qurrium
