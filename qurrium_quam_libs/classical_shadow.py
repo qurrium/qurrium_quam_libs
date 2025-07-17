@@ -1,10 +1,10 @@
-"""Qurrium-Qua_Libs Classical Shadow Output Transformation
+"""Qurrium Quam-Libs Crossroads - Classical Shadow Conversion Module
 
 This module provides functions to transform
-the output of Qurrium and Qua_Libs on classical shadow to each other.
+the output of Qurrium and Quam_Libs on classical shadow to each other.
 """
 
-from typing import Optional
+from collections.abc import Sequence
 from pathlib import Path
 
 from qiskit import QuantumCircuit
@@ -19,13 +19,14 @@ from qurry.tools import current_time
 # qurrium to qua_libs transformation
 def check_classical_shadow_exp(
     classical_shadow_exp: ShadowUnveilExperiment,
+    is_single_shot: bool = False,
 ) -> tuple[dict[int, dict[int, int]], dict[int, int]]:
-    """
-    Check if the classical shadow experiment is valid for conversion.
+    """Check if the classical shadow experiment is valid for conversion.
 
     Args:
         classical_shadow_exp (ShadowUnveilExperiment):
             The Qurry experiment to check.
+        is_single_shot (bool): If True, checks for single-shot experiments.
 
     Raises:
         TypeError: If the input is not a ShadowUnveilExperiment.
@@ -51,7 +52,7 @@ def check_classical_shadow_exp(
         for qi in classical_shadow_exp.args.qubits_measured
     ):
         raise ValueError("All measured qubits must be part of the unitary located.")
-    if classical_shadow_exp.commons.shots != 1:
+    if classical_shadow_exp.commons.shots != 1 and is_single_shot:
         raise ValueError("The number of shots must be 1 for QuaLibs conversion.")
     if "random_unitary_ids" not in classical_shadow_exp.beforewards.side_product:
         raise ValueError("The experiment must have 'random_unitary_ids' in side products.")
@@ -66,8 +67,7 @@ def get_gate_indices(
     random_unitary_ids: dict[int, int],
     registers_mapping: dict[int, int],
 ) -> list[int]:
-    """
-    Get the gate indices for the QuaLibs format.
+    """Get the gate indices for the QuaLibs format.
 
     Args:
         random_unitary_ids (dict[int, int]):
@@ -87,6 +87,7 @@ def single_shots_processing(
     registers_mapping: dict[int, int],
 ) -> tuple[str, list[int]]:
     """Single shot processing for QuaLibs format.
+
     Args:
         idx (int):
             The index of the single shot counts and random unitary.
@@ -114,14 +115,64 @@ def single_shots_processing(
     )
 
 
-def qurrium_single_shot_to_qua_libs_result(
+def qurrium_single_shot_to_qua_libs_single_shot_result(
     classical_shadow_exp: ShadowUnveilExperiment,
 ) -> list[tuple[str, list[int]]]:
-    """
-    Convert a Qurrium single-shot experiment to QuaLibs format result.
+    """Convert a Qurrium single-shot experiment to QuaLibs format single-shot result.
 
     Args:
-        qurry_exp (ShadowUnveil): The Qurry experiment to convert.
+        classical_shadow_exp (ShadowUnveil): The Qurry experiment to convert.
+
+    Returns:
+        list[tuple[str, list[int]]]:
+            List of tuples containing the bitstring and the corresponding gate indices.
+    """
+    random_unitary_ids, registers_mapping = check_classical_shadow_exp(
+        classical_shadow_exp, is_single_shot=True
+    )
+
+    result = [
+        single_shots_processing(idx, single_counts, single_random_unitary_id, registers_mapping)
+        for (idx, single_random_unitary_id), single_counts in zip(
+            random_unitary_ids.items(), classical_shadow_exp.afterwards.counts
+        )
+    ]
+    return result
+
+
+def multiple_shots_processing(
+    single_counts: dict[str, int],
+    random_unitary_ids: dict[int, int],
+    registers_mapping: dict[int, int],
+) -> tuple[dict[str, int], list[int]]:
+    """Multiple shot processing for QuaLibs format.
+
+    Args:
+        single_counts (dict[str, int]):
+            The counts of single-shot results.
+        random_unitary_ids (dict[int, int]):
+            Mapping of qubit indices to random unitary.
+        registers_mapping (dict[int, int]):
+            Mapping of qubit indices and classical registers.
+
+    Returns:
+        tuple[dict[str, int], list[int]]:
+            A tuple containing the bitstring and the corresponding gate indices.
+    """
+
+    return (
+        {k[: len(registers_mapping)]: v for k, v in single_counts.items()},
+        get_gate_indices(random_unitary_ids, registers_mapping),
+    )
+
+
+def qurrium_to_qua_libs_result(
+    classical_shadow_exp: ShadowUnveilExperiment,
+) -> list[tuple[dict[str, int], list[int]]]:
+    """Convert a Qurrium experiment to QuaLibs format result.
+
+    Args:
+        classical_shadow_exp (ShadowUnveil): The Qurry experiment to convert.
 
     Returns:
         list[tuple[str, list[int]]]:
@@ -130,7 +181,7 @@ def qurrium_single_shot_to_qua_libs_result(
     random_unitary_ids, registers_mapping = check_classical_shadow_exp(classical_shadow_exp)
 
     result = [
-        single_shots_processing(idx, single_counts, single_random_unitary_id, registers_mapping)
+        multiple_shots_processing(single_counts, single_random_unitary_id, registers_mapping)
         for (idx, single_random_unitary_id), single_counts in zip(
             random_unitary_ids.items(), classical_shadow_exp.afterwards.counts
         )
@@ -145,6 +196,7 @@ def single_shots_processing_ideal(
     registers_mapping: dict[int, int],
 ) -> tuple[dict[str, float], list[int]]:
     """Single shot processing for QuaLibs format.
+
     Args:
         idx (int):
             The index of the single shot counts and random unitary.
@@ -167,11 +219,10 @@ def single_shots_processing_ideal(
     return probs, get_gate_indices(random_unitary_ids, registers_mapping)
 
 
-def qurrium_single_shot_to_qua_libs_ideal_result(
+def qurrium_to_qua_libs_ideal_result(
     classical_shadow_exp: ShadowUnveilExperiment,
 ) -> list[tuple[dict[str, float], list[int]]]:
-    """
-    Convert a Qurrium single-shot experiment to QuaLibs format ideal result.
+    """Convert a Qurrium experiment to QuaLibs format ideal result.
 
     Args:
         classical_shadow_exp (ShadowUnveil): The Qurry experiment to convert.
@@ -193,22 +244,23 @@ def qurrium_single_shot_to_qua_libs_ideal_result(
 
 
 # qua_libs to qurrium transformation
-def qua_libs_result_to_qurrium_single_shot(
-    result: list[tuple[str, list[int]]],
+def qua_libs_single_shot_result_to_qurrium_single_shot(
+    result: Sequence[tuple[str, Sequence[int]]],
     exp_name: str = "experiment.qua_libs",
-    tags: Optional[tuple[str, ...]] = None,
-    save_location: Optional[str] = None,
+    tags: tuple[str, ...] | None = None,
+    save_location: str | None = None,
+    backend_name: str | None = None,
 ) -> ShadowUnveilExperiment:
-    """
-    Convert QuaLibs result to Qurrium single-shot experiment format.
+    """Convert QuaLibs single-shot result to Qurrium single-shot experiment format.
     We assume that the number of qubits is equal to the number of classical registers.
     And their mapping is identity.
 
     Args:
-        result (list[tuple[str, list[int]]]): The QuaLibs result to convert.
+        result (Sequence[tuple[str, Sequence[int]]]): The QuaLibs result to convert.
         exp_name (str): The name of the experiment.
-        tags (Optional[tuple[str, ...]]): Tags for the experiment.
-        save_location (Optional[str]): The location to save the experiment.
+        tags (tuple[str, ...] | None): Tags for the experiment.
+        save_location (str | None): The location to save the experiment.
+        backend_name (str | None): The name of the backend used for the experiment.
 
     Returns:
         ShadowUnveilExperiment: The converted Qurrium single-shot experiment.
@@ -217,6 +269,8 @@ def qua_libs_result_to_qurrium_single_shot(
         tags = ()
     elif not isinstance(tags, tuple):
         raise TypeError("Tags must be a tuple of strings.")
+    if any(not isinstance(tag, str) for tag in tags):
+        raise TypeError("Tags must be a tuple of strings, not a tuple of strings and other types.")
 
     sample_bitstring, sample_unitary_ids = result[0]
     if not isinstance(sample_bitstring, str):
@@ -228,7 +282,7 @@ def qua_libs_result_to_qurrium_single_shot(
     args = {
         "exp_name": exp_name,
         "times": len(result),
-        "qubits_measured": list(range(len(sample_bitstring))),
+        "qubits_measured": list(range(num_classical_register)),
         "registers_mapping": {qi: qi for qi in range(num_random_unitary)},
         "actual_num_qubits": num_classical_register,
         "unitary_located": list(range(num_random_unitary)),
@@ -237,7 +291,7 @@ def qua_libs_result_to_qurrium_single_shot(
         "exp_id": exp_id_process(None),
         "target_keys": [],
         "shots": 1,
-        "backend": "qua_libs_transformed",
+        "backend": "qua_libs_transformed" + (f"-{backend_name}" if backend_name else ""),
         "run_args": {},
         "transpile_args": {},
         "tags": tags,
@@ -267,6 +321,97 @@ def qua_libs_result_to_qurrium_single_shot(
     classical_shadow_exp.beforewards.side_product["random_unitary_ids"] = {}
     for idx, (bitstring, gate_indices) in enumerate(result):
         classical_shadow_exp.afterwards.counts.append({bitstring: 1})
+        classical_shadow_exp.beforewards.side_product["random_unitary_ids"][idx] = {
+            qi: gate_idx for qi, gate_idx in enumerate(gate_indices)
+        }
+
+    return classical_shadow_exp
+
+
+def qua_libs_result_to_qurrium(
+    result: Sequence[tuple[dict[str, int], Sequence[int]]],
+    shots_per_snapshot: int,
+    exp_name: str = "experiment.qua_libs",
+    tags: tuple[str, ...] | None = None,
+    save_location: str | None = None,
+    backend_name: str | None = None,
+) -> ShadowUnveilExperiment:
+    """Convert QuaLibs result to Qurrium experiment format.
+    We assume that the number of qubits is equal to the number of classical registers.
+    And their mapping is identity.
+
+    Args:
+        result (Sequence[tuple[dict[str, int], Sequence[int]]]): The QuaLibs result to convert.
+        shots_per_snapshot (int): The number of shots per snapshot in QuaLibs.
+        exp_name (str): The name of the experiment.
+        tags (tuple[str, ...] | None): Tags for the experiment.
+        save_location (str | None): The location to save the experiment.
+        backend_name (str | None): The name of the backend used for the experiment.
+
+    Returns:
+        ShadowUnveilExperiment: The converted Qurrium experiment.
+    """
+    if tags is None:
+        tags = ()
+    elif not isinstance(tags, tuple):
+        raise TypeError("Tags must be a tuple of strings.")
+
+    sample_counts, sample_unitary_ids = result[0]
+    if not isinstance(sample_counts, dict):
+        raise ValueError("The first element of the result must be a dictionary of counts.")
+
+    num_classical_register = len(list(sample_counts.keys())[0])
+    num_random_unitary = len(sample_unitary_ids)
+
+    args = {
+        "exp_name": exp_name,
+        "times": len(result),
+        "qubits_measured": list(range(num_classical_register)),
+        "registers_mapping": {qi: qi for qi in range(num_random_unitary)},
+        "actual_num_qubits": num_classical_register,
+        "unitary_located": list(range(num_random_unitary)),
+    }
+    commons = {
+        "exp_id": exp_id_process(None),
+        "target_keys": [],
+        "shots": shots_per_snapshot,
+        "backend": "qua_libs_transformed" + (f"-{backend_name}" if backend_name else ""),
+        "run_args": {},
+        "transpile_args": {},
+        "tags": tags,
+        "save_location": Path(save_location) if save_location else Path("./"),
+        "serial": None,
+        "summoner_id": None,
+        "summoner_name": None,
+        "datetimes": {
+            "transform-from-qua_libs": current_time(),
+        },
+    }
+
+    version_info = tuple(map(int, __version__.split(".")))
+    if version_info < (0, 13, 0):
+        # Qurrium upcomming version 0.13.0 will remove the `filename` and `files` fields.
+        commons["filename"] = ""
+        commons["files"] = {}
+
+    outfields = {
+        "denoted": "This is a QuaLibs result converted to Qurrium single-shot format.",
+    }
+
+    classical_shadow_exp = ShadowUnveilExperiment(
+        arguments=args, commonparams=commons, outfields=outfields
+    )
+
+    classical_shadow_exp.beforewards.side_product["random_unitary_ids"] = {}
+    for idx, (counts, gate_indices) in enumerate(result):
+        counts_values_sum = sum(counts.values())
+        if counts_values_sum != shots_per_snapshot:
+            raise ValueError(
+                "The sum of counts values must be equal "
+                f"to shots_per_snapshot ({shots_per_snapshot}). "
+                f"Found: {counts_values_sum} in index {idx}."
+            )
+        classical_shadow_exp.afterwards.counts.append(counts)
         classical_shadow_exp.beforewards.side_product["random_unitary_ids"][idx] = {
             qi: gate_idx for qi, gate_idx in enumerate(gate_indices)
         }
