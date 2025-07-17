@@ -60,7 +60,7 @@ nb_execution_timeout = 1200
 jupyter_execute_notebooks_only_build_toc_files = True  # pseudo-flag; handled by jupyter-book
 
 templates_path = ["_templates"]
-exclude_patterns = []
+exclude_patterns = ["jupyter_execute"]
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -82,13 +82,13 @@ html_css_files = [
 html_theme_options: dict[str, Any] = {
     "light_css_variables": {
         "color-brand-primary": "#D55E00",
-        "color-brand-content": "#FDB462",
+        "color-brand-content": "#F8921D",
         "color-brand-visited": "#348ABD",
     },
     "dark_css_variables": {
-        "color-brand-primary": "#FEFFB3",
-        "color-brand-content": "#FCFF39",
-        "color-brand-visited": "#8DD3C7",
+        "color-brand-primary": "#DA9057",
+        "color-brand-content": "#FDB462",
+        "color-brand-visited": "#FEFFB3",
     },
 }
 

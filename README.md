@@ -52,5 +52,5 @@ Builded by Sphinx.
 
 ```bash
 pip install -r ./docs/requirements.txt
-python -m sphinx docs docs/build
+python -m sphinx docs docs/_build
 ```
