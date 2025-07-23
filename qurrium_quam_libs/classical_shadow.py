@@ -1,9 +1,11 @@
 """Qurrium Quam-Libs Crossroads - Classical Shadow Conversion Module
+(:mod:`qurrium_quam_libs.classical_shadow`)
 
 This module provides functions to transform
 the output of Qurrium and Quam_Libs on classical shadow to each other.
 """
 
+from typing import Literal, Any
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -12,8 +14,10 @@ from qiskit.quantum_info import Statevector
 
 from qurry import __version__
 from qurry.qurrent.classical_shadow import ShadowUnveilExperiment
+from qurry.qurrent.classical_shadow.utils import circuit_method_core as shadow_circuit_maker
 from qurry.qurrium.experiment.utils import exp_id_process
-from qurry.tools import current_time
+from qurry.qurrium.utils import qasm_dumps
+from qurry.tools import current_time, DatetimeDict
 
 
 # qurrium to qua_libs transformation
@@ -189,7 +193,7 @@ def qurrium_to_qua_libs_result(
     return result
 
 
-def single_shots_processing_ideal(
+def processing_to_ideal_result(
     idx: int,
     circuit: QuantumCircuit,
     random_unitary_ids: dict[int, int],
@@ -234,7 +238,7 @@ def qurrium_to_qua_libs_ideal_result(
     random_unitary_ids, registers_mapping = check_classical_shadow_exp(classical_shadow_exp)
 
     ideal_result = [
-        single_shots_processing_ideal(idx, circuit, single_random_unitary_id, registers_mapping)
+        processing_to_ideal_result(idx, circuit, single_random_unitary_id, registers_mapping)
         for (idx, single_random_unitary_id), circuit in zip(
             random_unitary_ids.items(),
             classical_shadow_exp.beforewards.circuit,
@@ -332,9 +336,18 @@ def qua_libs_result_to_qurrium(
     result: Sequence[tuple[dict[str, int], Sequence[int]]],
     shots_per_snapshot: int,
     exp_name: str = "experiment.qua_libs",
-    tags: tuple[str, ...] | None = None,
-    save_location: str | None = None,
+    target_circuit: QuantumCircuit | None = None,
     backend_name: str | None = None,
+    tags: tuple[str, ...] | None = None,
+    datetimes: DatetimeDict | dict[str, str] | None = None,
+    outfields: dict[str, Any] | None = None,
+    # multimanager
+    serial: int | None = None,
+    summoner_id: str | None = None,
+    summoner_name: str | None = None,
+    # process tool
+    qasm_version: Literal["qasm2", "qasm3"] = "qasm3",
+    save_location: str | None = None,
 ) -> ShadowUnveilExperiment:
     """Convert QuaLibs result to Qurrium experiment format.
     We assume that the number of qubits is equal to the number of classical registers.
@@ -344,9 +357,23 @@ def qua_libs_result_to_qurrium(
         result (Sequence[tuple[dict[str, int], Sequence[int]]]): The QuaLibs result to convert.
         shots_per_snapshot (int): The number of shots per snapshot in QuaLibs.
         exp_name (str): The name of the experiment.
-        tags (tuple[str, ...] | None): Tags for the experiment.
-        save_location (str | None): The location to save the experiment.
+        target_circuit (QuantumCircuit | None): The target circuit for the experiment.
         backend_name (str | None): The name of the backend used for the experiment.
+        tags (tuple[str, ...] | None): Tags for the experiment.
+        datetimes (DatetimeDict | dict[str, str] | None):
+            Datetime information for the experiment.
+        outfields (dict[str, Any] | None): Additional data to include.
+
+        serial (int | None):
+            Serial number for the experiment in :class:`qurry.qurrium.multimanager.MultiManager`.
+        summoner_id (str | None):
+            ID of the summoner for :class:`qurry.qurrium.multimanager.MultiManager`.
+        summoner_name (str | None):
+            Name of the summoner for :class:`qurry.qurrium.multimanager.MultiManager`.
+
+        qasm_version (Literal['qasm2', 'qasm3']):
+            The OpenQASM version to use for the circuit. Defaults to 'qasm3'.
+        save_location (str | None): The location to save the experiment.
 
     Returns:
         ShadowUnveilExperiment: The converted Qurrium experiment.
@@ -355,6 +382,21 @@ def qua_libs_result_to_qurrium(
         tags = ()
     elif not isinstance(tags, tuple):
         raise TypeError("Tags must be a tuple of strings.")
+
+    if target_circuit is not None and not isinstance(target_circuit, QuantumCircuit):
+        raise TypeError("The target_circuit must be a QuantumCircuit instance.")
+
+    if datetimes is None:
+        datetimes = DatetimeDict()
+    elif not isinstance(datetimes, (DatetimeDict, dict)):
+        raise TypeError("Datetimes must be a DatetimeDict or a dictionary.")
+    for key, value in datetimes.items():
+        if not isinstance(value, str):
+            raise TypeError(
+                f"All values in datetimes must be strings. Found {value} for key {key}."
+            )
+    datetimes = DatetimeDict(datetimes)
+    datetimes.add_only("transform-from-qua_libs")
 
     sample_counts, sample_unitary_ids = result[0]
     if not isinstance(sample_counts, dict):
@@ -380,12 +422,10 @@ def qua_libs_result_to_qurrium(
         "transpile_args": {},
         "tags": tags,
         "save_location": Path(save_location) if save_location else Path("./"),
-        "serial": None,
-        "summoner_id": None,
-        "summoner_name": None,
-        "datetimes": {
-            "transform-from-qua_libs": current_time(),
-        },
+        "serial": serial,
+        "summoner_id": summoner_id,
+        "summoner_name": summoner_name,
+        "datetimes": datetimes,
     }
 
     version_info = tuple(map(int, __version__.split(".")))
@@ -394,12 +434,11 @@ def qua_libs_result_to_qurrium(
         commons["filename"] = ""
         commons["files"] = {}
 
-    outfields = {
-        "denoted": "This is a QuaLibs result converted to Qurrium single-shot format.",
-    }
+    outfields_inner = {} if outfields is None else outfields.copy()
+    outfields_inner["denoted"] = "This is a QuaLibs result converted to Qurrium single-shot format."
 
     classical_shadow_exp = ShadowUnveilExperiment(
-        arguments=args, commonparams=commons, outfields=outfields
+        arguments=args, commonparams=commons, outfields=outfields_inner
     )
 
     classical_shadow_exp.beforewards.side_product["random_unitary_ids"] = {}
@@ -412,8 +451,31 @@ def qua_libs_result_to_qurrium(
                 f"Found: {counts_values_sum} in index {idx}."
             )
         classical_shadow_exp.afterwards.counts.append(counts)
-        classical_shadow_exp.beforewards.side_product["random_unitary_ids"][idx] = {
-            qi: gate_idx for qi, gate_idx in enumerate(gate_indices)
-        }
+        classical_shadow_exp.beforewards.side_product["random_unitary_ids"][idx] = dict(
+            enumerate(gate_indices)
+        )
+
+    if target_circuit is not None:
+        classical_shadow_exp.beforewards.target.append((exp_name, target_circuit))
+
+        classical_shadow_exp.beforewards.target_qasm.append(
+            (exp_name, qasm_dumps(target_circuit, qasm_version))
+        )
+        circ_list = [
+            shadow_circuit_maker(
+                idx,
+                target_circuit,
+                "",
+                classical_shadow_exp.args.exp_name,
+                args["registers_mapping"],
+                gate_indices,
+            )
+            for idx, gate_indices in classical_shadow_exp.beforewards.side_product[
+                "random_unitary_ids"
+            ].items()
+        ]
+        classical_shadow_exp.beforewards.circuit_qasm.extend(
+            [qasm_dumps(q, qasm_version) for q in circ_list]
+        )
 
     return classical_shadow_exp
