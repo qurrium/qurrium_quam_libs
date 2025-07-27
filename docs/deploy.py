@@ -16,7 +16,7 @@ print(f"| Custom domain: {CNAME}")
 
 def deploy():
     """Deploy the documentation to GitHub Pages."""
-    if not os.path.exists("./deploy"):
+    if not os.path.exists("_build"):
         print(
             "| Error: The deploy directory does not exist. "
             "Please create it or run the build command first."
