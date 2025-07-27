@@ -1,6 +1,6 @@
 # Qurrium Quam-Libs Crossroads 🚏
 
-**_The Converter Between [Qurrium](https://docs.qurrium.org) and Quam-Libs_**
+**_The Converter Between [Qurrium](https://docs.qurrium.org) and [Quam-Libs](https://github.com/asqum/qua-libs)_**
 
 ## Installation
 

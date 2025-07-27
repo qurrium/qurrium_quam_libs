@@ -1,0 +1,62 @@
+/* 
+  * function linebreaking by following GihHub Issues
+  * https://github.com/sphinx-doc/sphinx/issues/1514#issuecomment-742703082
+*/
+
+/* Newlines (\a) and spaces (\20) before each parameter */
+.sig-param::before {
+  content: "\a\20\20\20\20";
+  white-space: pre;
+}
+
+/* Newline after the last parameter (so the closing bracket is on a new line) */
+dt em.sig-param:last-of-type::after {
+  content: "\a";
+  white-space: pre;
+}
+
+/* To have blue background of width of the block (instead of width of content) */
+dl.class > dt:first-of-type {
+  display: block !important;
+}
+
+/* Line break before function name */
+dt span.sig-prename::after {
+  content: "\a";
+  white-space: pre;
+}
+
+/* Background color for widget subareas */
+[data-theme="light"] {
+  --color-widget-background: #f8f8f8;
+  --color-widget-border: transparent;
+}
+[data-theme="dark"] {
+  --color-widget-background: #d0d0d0;
+  --color-widget-border: #fcfcfc;
+}
+[data-theme="auto"] {
+  --color-widget-background: #d0d0d0;
+  --color-widget-border: #fcfcfc;
+}
+
+.widget-subarea {
+  background-color: var(--color-widget-background);
+  border: 1px solid var(--color-widget-border);
+  padding: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.version-switcher {
+  margin: 1rem 1.2rem 0 1.2rem;
+  width: 80%;
+  font-size: 1rem;
+  padding: 0.3rem;
+  border: 1px solid var(--color-foreground-border);
+  background: var(--color-background-primary);
+  color: var(--color-foreground-primary);
+}
+
+.fa-2x {
+  padding: 0.2rem;
+}
