@@ -365,11 +365,11 @@ def qua_libs_result_to_qurrium(
         outfields (dict[str, Any] | None): Additional data to include.
 
         serial (int | None):
-            Serial number for the experiment in :class:`qurry.qurrium.multimanager.MultiManager`.
+            Serial number for the experiment in :class:`~qurry.qurrium.multimanager.MultiManager`.
         summoner_id (str | None):
-            ID of the summoner for :class:`qurry.qurrium.multimanager.MultiManager`.
+            ID of the summoner for :class:`~qurry.qurrium.multimanager.MultiManager`.
         summoner_name (str | None):
-            Name of the summoner for :class:`qurry.qurrium.multimanager.MultiManager`.
+            Name of the summoner for :class:`~qurry.qurrium.multimanager.MultiManager`.
 
         qasm_version (Literal['qasm2', 'qasm3']):
             The OpenQASM version to use for the circuit. Defaults to 'qasm3'.
