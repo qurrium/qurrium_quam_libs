@@ -13,3 +13,5 @@ ipykernel
 jupyter
 # qurrum requirements
 qurrium
+# utils
+ghp_import

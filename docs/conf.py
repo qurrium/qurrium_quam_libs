@@ -73,6 +73,7 @@ html_title = "Qurrium Quam-Libs Crossroads 🚏"
 html_sourcelink_suffix = ""
 
 html_extra_path = []  # You can set this if needed
+html_static_path = ["_static"]
 html_css_files = [
     "https://docs.qurrium.org/_static/custom.css",
     "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/fontawesome.min.css",
@@ -88,7 +89,7 @@ html_theme_options: dict[str, Any] = {
     "dark_css_variables": {
         "color-brand-primary": "#DA9057",
         "color-brand-content": "#FDB462",
-        "color-brand-visited": "#FEFFB3",
+        "color-brand-visited": "#81b1d2",
     },
 }
 
