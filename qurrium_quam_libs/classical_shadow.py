@@ -19,11 +19,18 @@ from qurry.qurrium.experiment.utils import exp_id_process
 from qurry.qurrium.utils import qasm_dumps
 from qurry.tools import current_time, DatetimeDict
 
+from .utils import (
+    QURRIUM_VERSION,
+    check_tags,
+    check_datatimes,
+    check_qua_libs_single_shots_results,
+    check_qua_libs_results,
+)
+
 
 # qurrium to qua_libs transformation
 def check_classical_shadow_exp(
-    classical_shadow_exp: ShadowUnveilExperiment,
-    is_single_shot: bool = False,
+    classical_shadow_exp: ShadowUnveilExperiment, is_single_shot: bool = False
 ) -> tuple[dict[int, dict[int, int]], dict[int, int]]:
     """Check if the classical shadow experiment is valid for conversion.
 
@@ -51,43 +58,48 @@ def check_classical_shadow_exp(
         raise ValueError("The qubits measured must be specified in the experiment.")
     if classical_shadow_exp.args.registers_mapping is None:
         raise ValueError("The registers mapping must be specified in the experiment.")
-    if any(
-        qi not in classical_shadow_exp.args.unitary_located
-        for qi in classical_shadow_exp.args.qubits_measured
-    ):
-        raise ValueError("All measured qubits must be part of the unitary located.")
+    measured_qubits = set(classical_shadow_exp.args.qubits_measured)
+    unitary_located = set(classical_shadow_exp.args.unitary_located)
+    missing_qubits = measured_qubits - unitary_located
+    if missing_qubits:
+        raise ValueError(
+            "All measured qubits must be part of the unitary located. "
+            + f"Missing qubits: {sorted(missing_qubits)}"
+        )
     if classical_shadow_exp.commons.shots != 1 and is_single_shot:
         raise ValueError("The number of shots must be 1 for QuaLibs conversion.")
-    if "random_unitary_ids" not in classical_shadow_exp.beforewards.side_product:
-        raise ValueError("The experiment must have 'random_unitary_ids' in side products.")
 
-    random_unitary_ids: dict[int, dict[int, int]] = classical_shadow_exp.beforewards.side_product[
-        "random_unitary_ids"
-    ]
-    return random_unitary_ids, classical_shadow_exp.args.registers_mapping
+    if (0, 13, 0) < QURRIUM_VERSION:
+        if classical_shadow_exp.args.random_basis is None:
+            raise ValueError("The experiment must have 'random_basis' in args.")
+        random_basis = classical_shadow_exp.args.random_basis
+    else:
+        if "random_unitary_ids" not in classical_shadow_exp.beforewards.side_product:
+            raise ValueError("The experiment must have 'random_unitary_ids' in side products.")
+        random_basis: dict[int, dict[int, int]] = classical_shadow_exp.beforewards.side_product[
+            "random_unitary_ids"
+        ]
+    return random_basis, classical_shadow_exp.args.registers_mapping
 
 
-def get_gate_indices(
-    random_unitary_ids: dict[int, int],
-    registers_mapping: dict[int, int],
-) -> list[int]:
+def get_gate_indices(random_basis: dict[int, int], registers_mapping: dict[int, int]) -> list[int]:
     """Get the gate indices for the QuaLibs format.
 
     Args:
-        random_unitary_ids (dict[int, int]):
-            Mapping of qubit indices to random unitary.
+        random_basis (dict[int, int]):
+            Mapping of qubit indices to random basis.
         registers_mapping (dict[int, int]):
             Mapping of qubit indices and classical registers.
     Returns:
         list[int]: A list of gate indices corresponding to the qubits.
     """
-    return [random_unitary_ids[qi] for qi in registers_mapping.keys()]
+    return [random_basis[qi] for qi in registers_mapping.keys()]
 
 
 def single_shots_processing(
     idx: int,
     single_shot_counts: dict[str, int],
-    random_unitary_ids: dict[int, int],
+    random_basis: dict[int, int],
     registers_mapping: dict[int, int],
 ) -> tuple[str, list[int]]:
     """Single shot processing for QuaLibs format.
@@ -97,7 +109,7 @@ def single_shots_processing(
             The index of the single shot counts and random unitary.
         single_shot_counts (dict[str, int]):
             The counts of single-shot results.
-        random_unitary_ids (dict[int, int]):
+        random_basis (dict[int, int]):
             Mapping of qubit indices to random unitary.
         registers_mapping (dict[int, int]):
             Mapping of qubit indices and classical registers.
@@ -115,7 +127,7 @@ def single_shots_processing(
     only_bitstring = list(single_shot_counts.keys())[0]
     return (
         only_bitstring[: len(registers_mapping)],
-        get_gate_indices(random_unitary_ids, registers_mapping),
+        get_gate_indices(random_basis, registers_mapping),
     )
 
 
@@ -131,14 +143,14 @@ def qurrium_single_shot_to_qua_libs_single_shot_result(
         list[tuple[str, list[int]]]:
             List of tuples containing the bitstring and the corresponding gate indices.
     """
-    random_unitary_ids, registers_mapping = check_classical_shadow_exp(
+    random_basis, registers_mapping = check_classical_shadow_exp(
         classical_shadow_exp, is_single_shot=True
     )
 
     result = [
         single_shots_processing(idx, single_counts, single_random_unitary_id, registers_mapping)
         for (idx, single_random_unitary_id), single_counts in zip(
-            random_unitary_ids.items(), classical_shadow_exp.afterwards.counts
+            random_basis.items(), classical_shadow_exp.afterwards.counts
         )
     ]
     return result
@@ -146,7 +158,7 @@ def qurrium_single_shot_to_qua_libs_single_shot_result(
 
 def multiple_shots_processing(
     single_counts: dict[str, int],
-    random_unitary_ids: dict[int, int],
+    random_basis: dict[int, int],
     registers_mapping: dict[int, int],
 ) -> tuple[dict[str, int], list[int]]:
     """Multiple shot processing for QuaLibs format.
@@ -154,8 +166,8 @@ def multiple_shots_processing(
     Args:
         single_counts (dict[str, int]):
             The counts of single-shot results.
-        random_unitary_ids (dict[int, int]):
-            Mapping of qubit indices to random unitary.
+        random_basis (dict[int, int]):
+            Mapping of qubit indices to random basis.
         registers_mapping (dict[int, int]):
             Mapping of qubit indices and classical registers.
 
@@ -166,7 +178,7 @@ def multiple_shots_processing(
 
     return (
         {k[: len(registers_mapping)]: v for k, v in single_counts.items()},
-        get_gate_indices(random_unitary_ids, registers_mapping),
+        get_gate_indices(random_basis, registers_mapping),
     )
 
 
@@ -176,18 +188,18 @@ def qurrium_to_qua_libs_result(
     """Convert a Qurrium experiment to QuaLibs format result.
 
     Args:
-        classical_shadow_exp (ShadowUnveil): The Qurry experiment to convert.
+        classical_shadow_exp (ShadowUnveil): The Qurrium experiment to convert.
 
     Returns:
         list[tuple[str, list[int]]]:
             List of tuples containing the bitstring and the corresponding gate indices.
     """
-    random_unitary_ids, registers_mapping = check_classical_shadow_exp(classical_shadow_exp)
+    random_basis, registers_mapping = check_classical_shadow_exp(classical_shadow_exp)
 
     result = [
         multiple_shots_processing(single_counts, single_random_unitary_id, registers_mapping)
         for (idx, single_random_unitary_id), single_counts in zip(
-            random_unitary_ids.items(), classical_shadow_exp.afterwards.counts
+            random_basis.items(), classical_shadow_exp.afterwards.counts
         )
     ]
     return result
@@ -196,7 +208,7 @@ def qurrium_to_qua_libs_result(
 def processing_to_ideal_result(
     idx: int,
     circuit: QuantumCircuit,
-    random_unitary_ids: dict[int, int],
+    random_basis: dict[int, int],
     registers_mapping: dict[int, int],
 ) -> tuple[dict[str, float], list[int]]:
     """Single shot processing for QuaLibs format.
@@ -206,8 +218,8 @@ def processing_to_ideal_result(
             The index of the single shot counts and random unitary.
         circuit (QuantumCircuit):
             The quantum circuit to process.
-        random_unitary_ids (dict[int, int]):
-            Mapping of qubit indices to random unitary.
+        random_basis (dict[int, int]):
+            Mapping of qubit indices to random basis.
         registers_mapping (dict[int, int]):
             Mapping of qubit indices and classical registers.
 
@@ -220,7 +232,7 @@ def processing_to_ideal_result(
     state = Statevector(no_measiure_circ)
     probs: dict[str, float] = state.probabilities_dict()
 
-    return probs, get_gate_indices(random_unitary_ids, registers_mapping)
+    return probs, get_gate_indices(random_basis, registers_mapping)
 
 
 def qurrium_to_qua_libs_ideal_result(
@@ -235,12 +247,12 @@ def qurrium_to_qua_libs_ideal_result(
         list[tuple[dict[str, float], list[int]]]:
             List of tuples containing the probabilities and the corresponding gate indices.
     """
-    random_unitary_ids, registers_mapping = check_classical_shadow_exp(classical_shadow_exp)
+    random_basis, registers_mapping = check_classical_shadow_exp(classical_shadow_exp)
 
     ideal_result = [
         processing_to_ideal_result(idx, circuit, single_random_unitary_id, registers_mapping)
         for (idx, single_random_unitary_id), circuit in zip(
-            random_unitary_ids.items(),
+            random_basis.items(),
             classical_shadow_exp.beforewards.circuit,
         )
     ]
@@ -269,28 +281,22 @@ def qua_libs_single_shot_result_to_qurrium_single_shot(
     Returns:
         ShadowUnveilExperiment: The converted Qurrium single-shot experiment.
     """
-    if tags is None:
-        tags = ()
-    elif not isinstance(tags, tuple):
-        raise TypeError("Tags must be a tuple of strings.")
-    if any(not isinstance(tag, str) for tag in tags):
-        raise TypeError("Tags must be a tuple of strings, not a tuple of strings and other types.")
-
-    sample_bitstring, sample_unitary_ids = result[0]
-    if not isinstance(sample_bitstring, str):
-        raise ValueError("The first element of the result must be a bitstring (str).")
-
-    num_classical_register = len(sample_bitstring)
-    num_random_unitary = len(sample_unitary_ids)
+    tags = check_tags(tags)
+    num_classical_register, num_random_basis = check_qua_libs_single_shots_results(result)
 
     args = {
         "exp_name": exp_name,
-        "times": len(result),
         "qubits_measured": list(range(num_classical_register)),
-        "registers_mapping": {qi: qi for qi in range(num_random_unitary)},
+        "registers_mapping": {qi: qi for qi in range(num_random_basis)},
         "actual_num_qubits": num_classical_register,
-        "unitary_located": list(range(num_random_unitary)),
+        "unitary_located": list(range(num_random_basis)),
     }
+    if QURRIUM_VERSION > (0, 13, 0):
+        args["snapshots"] = len(result)
+        args["random_basis"] = {}
+    else:
+        args["times"] = len(result)
+
     commons = {
         "exp_id": exp_id_process(None),
         "target_keys": [],
@@ -303,14 +309,9 @@ def qua_libs_single_shot_result_to_qurrium_single_shot(
         "serial": None,
         "summoner_id": None,
         "summoner_name": None,
-        "datetimes": {
-            "transform-from-qua_libs": current_time(),
-        },
+        "datetimes": {"transform-from-qua_libs": current_time()},
     }
-
-    version_info = tuple(map(int, __version__.split(".")))
-    if version_info < (0, 13, 0):
-        # Qurrium upcomming version 0.13.0 will remove the `filename` and `files` fields.
+    if QURRIUM_VERSION < (0, 13, 0):
         commons["filename"] = ""
         commons["files"] = {}
 
@@ -321,13 +322,17 @@ def qua_libs_single_shot_result_to_qurrium_single_shot(
     classical_shadow_exp = ShadowUnveilExperiment(
         arguments=args, commonparams=commons, outfields=outfields
     )
+    counts = [{bitstring: 1} for bitstring, gate_indices in result]
+    classical_shadow_exp.afterwards.counts.extend(counts)
 
-    classical_shadow_exp.beforewards.side_product["random_unitary_ids"] = {}
-    for idx, (bitstring, gate_indices) in enumerate(result):
-        classical_shadow_exp.afterwards.counts.append({bitstring: 1})
-        classical_shadow_exp.beforewards.side_product["random_unitary_ids"][idx] = {
-            qi: gate_idx for qi, gate_idx in enumerate(gate_indices)
-        }
+    random_basis = {
+        idx: dict(enumerate(gate_indices)) for idx, (bitstring, gate_indices) in enumerate(result)
+    }
+    if QURRIUM_VERSION > (0, 13, 0):
+        assert classical_shadow_exp.args.random_basis is not None, "Random basis must be set."
+        classical_shadow_exp.args.random_basis.update(random_basis)
+    else:
+        classical_shadow_exp.beforewards.side_product["random_unitary_ids"] = random_basis
 
     return classical_shadow_exp
 
@@ -378,41 +383,25 @@ def qua_libs_result_to_qurrium(
     Returns:
         ShadowUnveilExperiment: The converted Qurrium experiment.
     """
-    if tags is None:
-        tags = ()
-    elif not isinstance(tags, tuple):
-        raise TypeError("Tags must be a tuple of strings.")
-
+    tags = check_tags(tags)
+    datetimes = check_datatimes(datetimes)
     if target_circuit is not None and not isinstance(target_circuit, QuantumCircuit):
         raise TypeError("The target_circuit must be a QuantumCircuit instance.")
-
-    if datetimes is None:
-        datetimes = DatetimeDict()
-    elif not isinstance(datetimes, (DatetimeDict, dict)):
-        raise TypeError("Datetimes must be a DatetimeDict or a dictionary.")
-    for key, value in datetimes.items():
-        if not isinstance(value, str):
-            raise TypeError(
-                f"All values in datetimes must be strings. Found {value} for key {key}."
-            )
-    datetimes = DatetimeDict(datetimes)
-    datetimes.add_only("transform-from-qua_libs")
-
-    sample_counts, sample_unitary_ids = result[0]
-    if not isinstance(sample_counts, dict):
-        raise ValueError("The first element of the result must be a dictionary of counts.")
-
-    num_classical_register = len(list(sample_counts.keys())[0])
-    num_random_unitary = len(sample_unitary_ids)
+    num_classical_register, num_random_basis = check_qua_libs_results(result)
 
     args = {
         "exp_name": exp_name,
-        "times": len(result),
         "qubits_measured": list(range(num_classical_register)),
-        "registers_mapping": {qi: qi for qi in range(num_random_unitary)},
+        "registers_mapping": {qi: qi for qi in range(num_random_basis)},
         "actual_num_qubits": num_classical_register,
-        "unitary_located": list(range(num_random_unitary)),
+        "unitary_located": list(range(num_random_basis)),
     }
+    if QURRIUM_VERSION > (0, 13, 0):
+        args["snapshots"] = len(result)
+        args["random_basis"] = {}
+    else:
+        args["times"] = len(result)
+
     commons = {
         "exp_id": exp_id_process(None),
         "target_keys": [],
@@ -427,55 +416,64 @@ def qua_libs_result_to_qurrium(
         "summoner_name": summoner_name,
         "datetimes": datetimes,
     }
-
-    version_info = tuple(map(int, __version__.split(".")))
-    if version_info < (0, 13, 0):
-        # Qurrium upcomming version 0.13.0 will remove the `filename` and `files` fields.
+    if QURRIUM_VERSION < (0, 13, 0):
         commons["filename"] = ""
         commons["files"] = {}
 
     outfields_inner = {} if outfields is None else outfields.copy()
-    outfields_inner["denoted"] = "This is a QuaLibs result converted to Qurrium single-shot format."
+    outfields_inner["denoted"] = "This is a QuaLibs result converted to Qurrium format."
 
     classical_shadow_exp = ShadowUnveilExperiment(
         arguments=args, commonparams=commons, outfields=outfields_inner
     )
 
-    classical_shadow_exp.beforewards.side_product["random_unitary_ids"] = {}
-    for idx, (counts, gate_indices) in enumerate(result):
-        counts_values_sum = sum(counts.values())
-        if counts_values_sum != shots_per_snapshot:
-            raise ValueError(
-                "The sum of counts values must be equal "
-                f"to shots_per_snapshot ({shots_per_snapshot}). "
-                f"Found: {counts_values_sum} in index {idx}."
-            )
-        classical_shadow_exp.afterwards.counts.append(counts)
-        classical_shadow_exp.beforewards.side_product["random_unitary_ids"][idx] = dict(
-            enumerate(gate_indices)
+    counts = [single_counts for single_counts, gate_indices in result]
+    counts_sum_neq = [
+        idx
+        for idx, single_counts in enumerate(counts)
+        if sum(single_counts.values()) != shots_per_snapshot
+    ]
+    if counts_sum_neq:
+        raise ValueError(
+            "The sum of counts values must be equal "
+            f"to shots_per_snapshot ({shots_per_snapshot}). "
+            f"Found in following index: {counts_sum_neq}."
         )
+    classical_shadow_exp.afterwards.counts.extend(counts)
+
+    random_basis = {
+        idx: dict(enumerate(gate_indices))
+        for idx, (single_counts, gate_indices) in enumerate(result)
+    }
+    if QURRIUM_VERSION > (0, 13, 0):
+        assert classical_shadow_exp.args.random_basis is not None, "Random basis must be set."
+        classical_shadow_exp.args.random_basis.update(random_basis)
+    else:
+        classical_shadow_exp.beforewards.side_product["random_unitary_ids"] = random_basis
 
     if target_circuit is not None:
         classical_shadow_exp.beforewards.target.append((exp_name, target_circuit))
-
         classical_shadow_exp.beforewards.target_qasm.append(
             (exp_name, qasm_dumps(target_circuit, qasm_version))
         )
-        circ_list = [
-            shadow_circuit_maker(
-                idx,
-                target_circuit,
-                "",
-                classical_shadow_exp.args.exp_name,
-                args["registers_mapping"],
-                gate_indices,
-            )
-            for idx, gate_indices in classical_shadow_exp.beforewards.side_product[
-                "random_unitary_ids"
-            ].items()
-        ]
+
+        classical_shadow_exp.beforewards.circuit.clear()
+        classical_shadow_exp.beforewards.circuit_qasm.clear()
+        classical_shadow_exp.beforewards.circuit.extend(
+            [
+                shadow_circuit_maker(
+                    idx,
+                    target_circuit,
+                    "",
+                    classical_shadow_exp.args.exp_name,
+                    args["registers_mapping"],
+                    gate_indices,
+                )
+                for idx, gate_indices in random_basis.items()
+            ]
+        )
         classical_shadow_exp.beforewards.circuit_qasm.extend(
-            [qasm_dumps(q, qasm_version) for q in circ_list]
+            [qasm_dumps(q, qasm_version) for q in classical_shadow_exp.beforewards.circuit]
         )
 
     return classical_shadow_exp
