@@ -3,7 +3,6 @@
 from collections.abc import Sequence
 
 from qurry import __version__
-from qurry.tools import DatetimeDict
 
 
 def get_version_info() -> tuple[int, int, int]:
@@ -19,50 +18,6 @@ def get_version_info() -> tuple[int, int, int]:
 
 QURRIUM_VERSION = get_version_info()
 """The current version of Qurrium."""
-
-
-def check_tags(tags: tuple[str, ...] | None) -> tuple[str, ...]:
-    """Check tags and return formatted tags.
-
-    Args:
-        tags (tuple[str, ...] | None): Tags for the experiment.
-
-    Returns:
-        tuple[str, ...]: Formatted tags for the experiment.
-    """
-    if tags is None:
-        tags = ()
-    elif not isinstance(tags, tuple):
-        raise TypeError("Tags must be a tuple of strings.")
-
-    if any(not isinstance(tag, str) for tag in tags):
-        raise TypeError("Tags must be a tuple of strings, not a tuple of strings and other types.")
-
-    return tags
-
-
-def check_datatimes(datetimes: DatetimeDict | dict[str, str] | None) -> DatetimeDict:
-    """Check and format the datetimes dictionary.
-
-    Args:
-        datetimes (DatetimeDict | dict[str, str] | None): The datetimes dictionary.
-
-    Returns:
-        DatetimeDict: The formatted datetimes dictionary.
-    """
-    if datetimes is None:
-        datetimes = DatetimeDict()
-    elif not isinstance(datetimes, (DatetimeDict, dict)):
-        raise TypeError("Datetimes must be a DatetimeDict or a dictionary.")
-    for key, value in datetimes.items():
-        if not isinstance(value, str):
-            raise TypeError(
-                f"All values in datetimes must be strings. Found {value} for key {key}."
-            )
-    datetimes = DatetimeDict(datetimes)
-    datetimes.add_only("transform-from-qua_libs")
-
-    return datetimes
 
 
 def check_qua_libs_single_shots_results(
@@ -100,7 +55,7 @@ def check_qua_libs_single_shots_results(
     return num_classical_register, num_random_basis
 
 
-def validate_single_counts(single_counts) -> bool:
+def validate_single_counts(single_counts: dict[str, int]) -> bool:
     """Validate the single counts dictionary.
 
     Args:

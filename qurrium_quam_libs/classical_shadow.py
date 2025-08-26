@@ -21,8 +21,6 @@ from qurry.tools import current_time, DatetimeDict
 
 from .utils import (
     QURRIUM_VERSION,
-    check_tags,
-    check_datatimes,
     check_qua_libs_single_shots_results,
     check_qua_libs_results,
 )
@@ -32,7 +30,8 @@ from .utils import (
 def check_classical_shadow_exp(
     classical_shadow_exp: ShadowUnveilExperiment, is_single_shot: bool = False
 ) -> tuple[dict[int, dict[int, int]], dict[int, int]]:
-    """Check if the classical shadow experiment is valid for conversion.
+    """Check if the classical shadow experiment is valid for conversion,
+    then return its random basis and registers mapping.
 
     Args:
         classical_shadow_exp (ShadowUnveilExperiment):
@@ -82,18 +81,20 @@ def check_classical_shadow_exp(
     return random_basis, classical_shadow_exp.args.registers_mapping
 
 
-def get_gate_indices(random_basis: dict[int, int], registers_mapping: dict[int, int]) -> list[int]:
+def get_gate_indices(
+    single_random_basis: dict[int, int], registers_mapping: dict[int, int]
+) -> list[int]:
     """Get the gate indices for the QuaLibs format.
 
     Args:
-        random_basis (dict[int, int]):
+        single_random_basis (dict[int, int]):
             Mapping of qubit indices to random basis.
         registers_mapping (dict[int, int]):
             Mapping of qubit indices and classical registers.
     Returns:
         list[int]: A list of gate indices corresponding to the qubits.
     """
-    return [random_basis[qi] for qi in registers_mapping.keys()]
+    return [single_random_basis[qi] for qi in registers_mapping.keys()]
 
 
 def single_shots_processing(
@@ -158,7 +159,7 @@ def qurrium_single_shot_to_qua_libs_single_shot_result(
 
 def multiple_shots_processing(
     single_counts: dict[str, int],
-    random_basis: dict[int, int],
+    single_random_basis: dict[int, int],
     registers_mapping: dict[int, int],
 ) -> tuple[dict[str, int], list[int]]:
     """Multiple shot processing for QuaLibs format.
@@ -166,7 +167,7 @@ def multiple_shots_processing(
     Args:
         single_counts (dict[str, int]):
             The counts of single-shot results.
-        random_basis (dict[int, int]):
+        single_random_basis (dict[int, int]):
             Mapping of qubit indices to random basis.
         registers_mapping (dict[int, int]):
             Mapping of qubit indices and classical registers.
@@ -178,7 +179,7 @@ def multiple_shots_processing(
 
     return (
         {k[: len(registers_mapping)]: v for k, v in single_counts.items()},
-        get_gate_indices(random_basis, registers_mapping),
+        get_gate_indices(single_random_basis, registers_mapping),
     )
 
 
@@ -281,7 +282,6 @@ def qua_libs_single_shot_result_to_qurrium_single_shot(
     Returns:
         ShadowUnveilExperiment: The converted Qurrium single-shot experiment.
     """
-    tags = check_tags(tags)
     num_classical_register, num_random_basis = check_qua_libs_single_shots_results(result)
 
     args = {
@@ -322,6 +322,7 @@ def qua_libs_single_shot_result_to_qurrium_single_shot(
     classical_shadow_exp = ShadowUnveilExperiment(
         arguments=args, commonparams=commons, outfields=outfields
     )
+
     counts = [{bitstring: 1} for bitstring, gate_indices in result]
     classical_shadow_exp.afterwards.counts.extend(counts)
 
@@ -383,8 +384,6 @@ def qua_libs_result_to_qurrium(
     Returns:
         ShadowUnveilExperiment: The converted Qurrium experiment.
     """
-    tags = check_tags(tags)
-    datetimes = check_datatimes(datetimes)
     if target_circuit is not None and not isinstance(target_circuit, QuantumCircuit):
         raise TypeError("The target_circuit must be a QuantumCircuit instance.")
     num_classical_register, num_random_basis = check_qua_libs_results(result)
@@ -426,6 +425,7 @@ def qua_libs_result_to_qurrium(
     classical_shadow_exp = ShadowUnveilExperiment(
         arguments=args, commonparams=commons, outfields=outfields_inner
     )
+    classical_shadow_exp.commons.datetimes.add_only("transform-from-qua_libs")
 
     counts = [single_counts for single_counts, gate_indices in result]
     counts_sum_neq = [
