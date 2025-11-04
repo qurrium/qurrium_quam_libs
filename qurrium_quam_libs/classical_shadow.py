@@ -12,8 +12,8 @@ from pathlib import Path
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector
 
-from qurry.qurrent.classical_shadow import ShadowUnveilExperiment
-from qurry.qurrent.classical_shadow.utils import circuit_method_core as shadow_circuit_maker
+from qurry.qurshady.classical_shadow import ShadowUnveilExperiment
+from qurry.qurshady.classical_shadow.utils import circuit_method_core as shadow_circuit_maker
 from qurry.qurrium.experiment.utils import exp_id_process
 from qurry.qurrium.utils import qasm_dumps
 from qurry.tools import current_time, DatetimeDict
